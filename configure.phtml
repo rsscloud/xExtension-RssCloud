@@ -1,0 +1,89 @@
+<?php
+	declare(strict_types=1);
+	/** @var RssCloudExtension $this */
+	$callback = $this->callbackUrl();
+?>
+<form action="<?= _url('extension', 'configure', 'e', urlencode($this->getName())) ?>" method="post">
+	<input type="hidden" name="_csrf" value="<?= FreshRSS_Auth::csrfToken() ?>" />
+
+	<div class="form-group">
+		<label class="group-name"><?= _t('ext.rsscloud.callback') ?></label>
+		<div class="group-controls">
+			<?php if ($callback === null): ?>
+				<p class="alert alert-warn"><?= _t('ext.rsscloud.callback.invalid') ?></p>
+			<?php else: ?>
+				<kbd><?= htmlspecialchars($callback->url(), ENT_COMPAT, 'UTF-8') ?></kbd>
+				<?php if (!Minz_Request::serverIsPublic($callback->url())): ?>
+					<p class="alert alert-warn"><?= _t('ext.rsscloud.callback.private') ?></p>
+				<?php endif; ?>
+			<?php endif; ?>
+			<p class="help"><?= _i('help') ?> <?= _t('ext.rsscloud.callback.help') ?></p>
+		</div>
+	</div>
+
+	<div class="form-group">
+		<label class="group-name" for="feeds_enabled"><?= _t('ext.rsscloud.feeds_enabled') ?></label>
+		<div class="group-controls">
+			<input type="checkbox" name="feeds_enabled" id="feeds_enabled" value="1" <?= $this->isEnabledForFeeds() ? 'checked' : '' ?> />
+			<p class="help"><?= _i('help') ?> <?= _t('ext.rsscloud.feeds_enabled.help') ?></p>
+		</div>
+	</div>
+
+	<div class="form-group">
+		<label class="group-name" for="opml_enabled"><?= _t('ext.rsscloud.opml_enabled') ?></label>
+		<div class="group-controls">
+			<input type="checkbox" name="opml_enabled" id="opml_enabled" value="1" <?= $this->isEnabledForOpml() ? 'checked' : '' ?> />
+			<p class="help"><?= _i('help') ?> <?= _t('ext.rsscloud.opml_enabled.help') ?></p>
+		</div>
+	</div>
+
+	<div class="form-group">
+		<label class="group-name" for="skip_polling"><?= _t('ext.rsscloud.skip_polling') ?></label>
+		<div class="group-controls">
+			<input type="checkbox" name="skip_polling" id="skip_polling" value="1" <?= $this->isPollingSkipped() ? 'checked' : '' ?> />
+			<p class="help"><?= _i('help') ?> <?= _t('ext.rsscloud.skip_polling.help') ?></p>
+		</div>
+	</div>
+
+	<div class="form-group">
+		<label class="group-name" for="renew_hours"><?= _t('ext.rsscloud.renew_hours') ?></label>
+		<div class="group-controls">
+			<input type="number" name="renew_hours" id="renew_hours" min="1" max="168"
+				value="<?= (int)($this->renewSeconds() / 3600) ?>" />
+			<p class="help"><?= _i('help') ?> <?= _t('ext.rsscloud.renew_hours.help') ?></p>
+		</div>
+	</div>
+
+	<div class="form-group">
+		<label class="group-name" for="cooldown_seconds"><?= _t('ext.rsscloud.cooldown') ?></label>
+		<div class="group-controls">
+			<input type="number" name="cooldown_seconds" id="cooldown_seconds" min="0" max="3600"
+				value="<?= $this->cooldownSeconds() ?>" />
+			<p class="help"><?= _i('help') ?> <?= _t('ext.rsscloud.cooldown.help') ?></p>
+		</div>
+	</div>
+
+	<div class="form-group">
+		<label class="group-name" for="base_url"><?= _t('ext.rsscloud.base_url') ?></label>
+		<div class="group-controls">
+			<input type="url" name="base_url" id="base_url" class="long"
+				value="<?= htmlspecialchars($this->getSystemConfigurationString('base_url') ?? '', ENT_COMPAT, 'UTF-8') ?>" />
+			<p class="help"><?= _i('help') ?> <?= _t('ext.rsscloud.base_url.help') ?></p>
+		</div>
+	</div>
+
+	<div class="form-group">
+		<label class="group-name" for="regenerate_token"><?= _t('ext.rsscloud.regenerate_token') ?></label>
+		<div class="group-controls">
+			<input type="checkbox" name="regenerate_token" id="regenerate_token" value="1" />
+			<p class="help"><?= _i('help') ?> <?= _t('ext.rsscloud.regenerate_token.help') ?></p>
+		</div>
+	</div>
+
+	<div class="form-group form-actions">
+		<div class="group-controls">
+			<button type="submit" class="btn btn-important"><?= _t('gen.action.submit') ?></button>
+			<button type="reset" class="btn"><?= _t('gen.action.cancel') ?></button>
+		</div>
+	</div>
+</form>

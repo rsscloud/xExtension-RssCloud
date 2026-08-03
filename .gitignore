@@ -1,0 +1,8 @@
+# OS files
+.DS_Store
+
+# Temp files
+*~
+*.bak
+*.backup
+*.swp

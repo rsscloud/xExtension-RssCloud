@@ -1,0 +1,8 @@
+{
+	"name": "rssCloud",
+	"author": "Andrew Shell",
+	"description": "Real-time updates via rssCloud, for feeds advertising <cloud> or <source:cloud>, and for dynamic OPML subscription lists advertising <source:cloud>.",
+	"version": "0.1.0",
+	"entrypoint": "RssCloud",
+	"type": "system"
+}
