@@ -107,13 +107,19 @@ final class RssCloud_Redirects {
 		$current = $url;
 		$seen = [$current => true];
 
-		for ($hop = 0; $hop < self::MAX_HOPS; $hop++) {
+		// One probe more than the hop limit: the URL reached by the last allowed hop still has to be
+		// checked, or a chain of exactly MAX_HOPS would be reported as unresolvable despite being
+		// within the limit — which is also how core counts, in `FreshRSS_http_Util::httpGet()`.
+		for ($hop = 0; $hop <= self::MAX_HOPS; $hop++) {
 			$location = self::permanentLocation($current, $attributes);
 			if ($location === false) {
 				return null;
 			}
 			if ($location === null) {
 				return $current;
+			}
+			if ($hop === self::MAX_HOPS) {
+				break;
 			}
 			$absolute = \SimplePie\Misc::absolutize_url($location, $current);
 			$next = is_string($absolute) ? (FreshRSS_http_Util::checkUrl($absolute, fixScheme: false) ?: '') : '';
@@ -125,7 +131,8 @@ final class RssCloud_Redirects {
 			$current = $next;
 		}
 
-		Minz_Log::warning('rssCloud: too many permanent redirects from ' . $url, RSSCLOUD_LOG);
+		Minz_Log::warning('rssCloud: too many permanent redirects from ' .
+			\SimplePie\Misc::url_remove_credentials($url), RSSCLOUD_LOG);
 		return null;
 	}
 
@@ -191,14 +198,24 @@ final class RssCloud_Redirects {
 		$error = curl_error($ch);
 
 		if ($error !== '') {
-			Minz_Log::debug('rssCloud: cannot check ' . $url . ' for a permanent redirect: ' . $error, RSSCLOUD_LOG);
+			Minz_Log::debug('rssCloud: cannot check ' . \SimplePie\Misc::url_remove_credentials($url) .
+				' for a permanent redirect: ' . $error, RSSCLOUD_LOG);
 			return false;
 		}
-		// A server that rejects HEAD tells us nothing about redirection, which is the status quo, not
-		// a failure — retrying it in six hours would not produce a different answer.
-		if (!in_array($status, [301, 308], true)) {
-			return null;
+
+		if (in_array($status, [301, 308], true)) {
+			// A permanent redirect with nowhere to go is malformed, and says nothing either way.
+			return is_string($location) && $location !== '' ? $location : false;
 		}
-		return is_string($location) && $location !== '' ? $location : null;
+
+		// Transient: the same request may well answer differently later, so this must not be recorded
+		// as a lasting "did not move" — that would let duplicates resume for the whole cache lifetime.
+		if ($status === 0 || $status === 408 || $status === 429 || $status >= 500) {
+			return false;
+		}
+
+		// Anything else is a stable answer of "this has not permanently moved", including a server
+		// that rejects HEAD outright: retrying that in six hours would not produce a different answer.
+		return null;
 	}
 }

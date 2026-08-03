@@ -129,7 +129,9 @@ usual.
 
 The hook fires on every import path, so this covers refreshes driven by cron or the CLI as well as by
 a notification, and keeps a manual subscription from duplicating a feed already held under its
-post-redirect URL.
+post-redirect URL. It is registered regardless of the two configuration switches: those govern
+whether rssCloud *subscribes* to a resource, while these duplicates are created by the dynamic OPML
+refresh itself, which runs either way.
 
 ## Known gaps
 

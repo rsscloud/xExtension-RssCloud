@@ -81,8 +81,12 @@ final class RssCloudExtension extends Minz_Extension {
 		}
 		if ($this->isEnabledForOpml()) {
 			$this->registerHook(Minz_HookType::FreshrssUserMaintenance, [$this, 'onUserMaintenance']);
-			$this->registerHook(Minz_HookType::FeedBeforeInsert, [$this, 'onFeedBeforeInsert']);
 		}
+
+		// Deliberately not gated on either switch. Those govern whether rssCloud *subscribes* to a
+		// resource, whereas the duplicates this guards against are created by the dynamic OPML
+		// refresh itself — which cron and the CLI perform whatever this extension is set to do.
+		$this->registerHook(Minz_HookType::FeedBeforeInsert, [$this, 'onFeedBeforeInsert']);
 	}
 
 	#[\Override]
@@ -387,7 +391,8 @@ final class RssCloudExtension extends Minz_Extension {
 			return $feed;
 		}
 		Minz_Log::notice('rssCloud: ' . \SimplePie\Misc::url_remove_credentials($url) .
-			' permanently moved to a feed already subscribed as ' . $target . ', reusing it', RSSCLOUD_LOG);
+			' permanently moved to a feed already subscribed as ' .
+			\SimplePie\Misc::url_remove_credentials($target) . ', reusing it', RSSCLOUD_LOG);
 		return $feed;
 	}
 
