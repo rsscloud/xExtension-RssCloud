@@ -71,6 +71,7 @@ Deliberately mirrors core's WebSub layout under `PSHB_PATH`:
 ```text
 data/rssCloud/resources/<sha1(resourceUrl)>/!cloud.json     subscription state
 data/rssCloud/resources/<sha1(resourceUrl)>/<username>.txt  one marker per interested user
+data/rssCloud/redirects/<sha1(url)>.json                    where a URL permanently moved to
 ```
 
 Subscriptions are instance-wide (the cloud server knows one callback), but resources are per-user,
@@ -81,6 +82,10 @@ Feeds additionally carry an `rssCloud` attribute holding the resource URL they a
 is what makes the polling decision possible *before* a feed is fetched — `FreshRSS_Feed::selfUrl()`
 is only populated during the SimplePie parse and is not persisted.
 
+Redirect resolutions are cached one file per URL, so that concurrent notifications cannot lose each
+other's writes. An answer is trusted for 30 days; a resolution that *failed* — as opposed to one that
+found no move — is retried after 6 hours.
+
 Logs go to `data/users/_/log_rsscloud.txt`.
 
 ## Hooks used
@@ -88,13 +93,45 @@ Logs go to `data/users/_/log_rsscloud.txt`.
 | Hook | Purpose |
 | --- | --- |
 | `ApiMisc` | serve the callback |
-| `SimplepieAfterInit` | discover a feed's cloud, subscribe, persist the resource attribute |
+| `SimplepieAfterInit` | discover a feed's cloud, subscribe, persist the resource attribute; pin dynamic OPML feed URLs |
 | `FeedsListBeforeActualize` | renew feed subscriptions (capped per cycle) |
 | `FeedBeforeActualize` | skip polling a feed with a healthy subscription |
 | `FreshrssUserMaintenance` | discover and renew dynamic OPML subscriptions |
+| `FeedBeforeInsert` | reconcile a redirected feed against one already subscribed |
 
 Renewal has to happen in `FeedsListBeforeActualize` rather than at discovery time, because a feed
 whose polling is skipped never reaches `SimplepieAfterInit` and would otherwise never renew.
+
+### Redirected feeds in dynamic OPML categories
+
+FreshRSS and OPML disagree about what identifies a feed:
+
+* `FreshRSS_Feed::load()` treats a feed as the document it resolves to, and rewrites the stored URL
+  when the feed answers HTTP 301.
+* `FreshRSS_Category::refreshDynamicOpml()` treats a feed as the exact `xmlUrl` string in the list,
+  which does not change.
+
+One 301 is enough to make them disagree forever. Every later refresh then reads the entry as new and
+inserts it again, and mutes the drifted copy for having disappeared from the list. Nothing catches
+the collision: `_feed.url` has no unique index, and `FeedDAO::updateFeed()` does not check for one.
+Copies accumulate at one per refresh — unbounded here, because rssCloud refreshes on notification
+rather than on a timer.
+
+`FeedBeforeInsert` settles it at the import step, before core does its matching. A feed whose URL is
+not already subscribed is resolved to wherever it permanently moved; if *that* is a feed we hold, the
+import is addressed to it instead. Core then recognises it as existing, so it is neither inserted nor
+muted, and `FeedDAO::addFeedObject()` unmutes it if an earlier refresh muted it.
+
+Only 301 and 308 are followed. A temporary redirect deliberately says the resource has *not* moved,
+so following it would merge two feeds the publisher considers distinct. A feed that moved onto
+nothing we hold is left exactly as the list gives it, and core canonicalises it on first fetch as
+usual.
+
+The hook fires on every import path, so this covers refreshes driven by cron or the CLI as well as by
+a notification, and keeps a manual subscription from duplicating a feed already held under its
+post-redirect URL. It is registered regardless of the two configuration switches: those govern
+whether rssCloud *subscribes* to a resource, while these duplicates are created by the dynamic OPML
+refresh itself, which runs either way.
 
 ## Known gaps
 

@@ -44,6 +44,7 @@ final class RssCloudExtension extends Minz_Extension {
 	private const FEED_ATTRIBUTE = 'rssCloud';
 
 	private ?RssCloud_Registry $registry = null;
+	private ?RssCloud_Redirects $redirects = null;
 	private ?RssCloud_Subscriber $subscriber = null;
 
 	/** Whether {@see self::subscriber()} has run, so a failure is diagnosed and logged only once. */
@@ -81,6 +82,11 @@ final class RssCloudExtension extends Minz_Extension {
 		if ($this->isEnabledForOpml()) {
 			$this->registerHook(Minz_HookType::FreshrssUserMaintenance, [$this, 'onUserMaintenance']);
 		}
+
+		// Deliberately not gated on either switch. Those govern whether rssCloud *subscribes* to a
+		// resource, whereas the duplicates this guards against are created by the dynamic OPML
+		// refresh itself — which cron and the CLI perform whatever this extension is set to do.
+		$this->registerHook(Minz_HookType::FeedBeforeInsert, [$this, 'onFeedBeforeInsert']);
 	}
 
 	#[\Override]
@@ -88,12 +94,15 @@ final class RssCloudExtension extends Minz_Extension {
 		// Note: install() runs *before* Minz_ExtensionManager enables the extension, so the
 		// autoloader registered above is not active yet. Nothing here may touch an RssCloud_* class.
 		$resources = RSSCLOUD_PATH . '/resources';
-		if (!@is_dir($resources) && !@mkdir($resources, 0770, true)) {
-			return 'Cannot create ' . $resources;
+		$redirects = RSSCLOUD_PATH . '/redirects';
+		foreach ([$resources, $redirects] as $directory) {
+			if (!@is_dir($directory) && !@mkdir($directory, 0770, true)) {
+				return 'Cannot create ' . $directory;
+			}
 		}
 		// `data/.htaccess` denies all, but add the same directory-listing guards core ships under
 		// `data/PubSubHubbub/` for servers that do not read .htaccess.
-		foreach ([RSSCLOUD_PATH, $resources] as $directory) {
+		foreach ([RSSCLOUD_PATH, $resources, $redirects] as $directory) {
 			if (!file_exists($directory . '/index.html')) {
 				@file_put_contents($directory . '/index.html', '');
 			}
@@ -174,6 +183,10 @@ final class RssCloudExtension extends Minz_Extension {
 
 	private function registry(): RssCloud_Registry {
 		return $this->registry ??= new RssCloud_Registry(RSSCLOUD_PATH);
+	}
+
+	private function redirects(): RssCloud_Redirects {
+		return $this->redirects ??= new RssCloud_Redirects(RSSCLOUD_PATH);
 	}
 
 	private function subscriber(): ?RssCloud_Subscriber {
@@ -323,6 +336,64 @@ final class RssCloudExtension extends Minz_Extension {
 			}
 			$this->ensureSubscribed($opmlUrl, $endpoint, RssCloud_Registry::KIND_OPML);
 		}
+	}
+
+	/**
+	 * Address a feed being imported by the URL it has permanently moved to, when that is a feed we
+	 * already hold. Otherwise leave it exactly as the list gives it.
+	 *
+	 * This is what stops a dynamic OPML category accumulating duplicates. The two sides disagree
+	 * about what identifies a feed:
+	 *
+	 * * `FreshRSS_Feed::load()` rewrites a feed's stored URL to wherever it moved on HTTP 301.
+	 * * `FreshRSS_Category::refreshDynamicOpml()` matches what it holds against the OPML by exact URL.
+	 *
+	 * So one 301 is enough to make every later refresh read the entry as new and insert it again,
+	 * then mute the drifted copy for having vanished from the list. Nothing catches the collision:
+	 * `_feed.url` carries no unique index, and `FeedDAO::updateFeed()` does not check for one. The
+	 * copies therefore accumulate at one per refresh — unbounded under rssCloud, where refreshes
+	 * follow notifications rather than a timer.
+	 *
+	 * Resolving the redirect here settles the disagreement in core's favour, at the import step and
+	 * before core does its matching: the feed is recognised as one we already hold, so it is neither
+	 * inserted nor muted, and `FeedDAO::addFeedObject()` unmutes it if an earlier refresh muted it.
+	 *
+	 * The hook fires on every import path, so this also covers refreshes driven by cron or the CLI
+	 * rather than by a notification, and keeps a manual subscription from duplicating a feed already
+	 * held under its post-redirect URL.
+	 *
+	 * The feed is always returned: the hook can cancel an import by returning null, but a URL this
+	 * extension failed to reconcile is not a reason to drop a subscription the list asked for.
+	 */
+	public function onFeedBeforeInsert(FreshRSS_Feed $feed): FreshRSS_Feed {
+		$url = $feed->url();
+		$feedDAO = FreshRSS_Factory::createFeedDao();
+		if ($url === '' || $feedDAO->searchByUrl($url) !== null) {
+			// Already held under this exact URL, so there is nothing to reconcile — and no reason to
+			// spend a request finding that out.
+			return $feed;
+		}
+
+		$target = $this->redirects()->resolve($url, $feed->attributes());
+		if ($target === $url) {
+			return $feed;
+		}
+		if ($feedDAO->searchByUrl($target) === null) {
+			// It moved, but not onto anything we hold. Genuinely new, so let core add it under the
+			// URL the list gives and rewrite that itself on the first fetch.
+			return $feed;
+		}
+
+		try {
+			$feed->_url($target);
+		} catch (FreshRSS_BadUrl_Exception $e) {
+			Minz_Log::warning('rssCloud: ' . $e->getMessage(), RSSCLOUD_LOG);
+			return $feed;
+		}
+		Minz_Log::notice('rssCloud: ' . \SimplePie\Misc::url_remove_credentials($url) .
+			' permanently moved to a feed already subscribed as ' .
+			\SimplePie\Misc::url_remove_credentials($target) . ', reusing it', RSSCLOUD_LOG);
+		return $feed;
 	}
 
 	// </hooks>
