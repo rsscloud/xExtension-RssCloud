@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  php:
+    name: PHP
+    runs-on: ubuntu-latest
+    steps:
+      # This extension cannot be analysed on its own: every class it touches
+      # (Minz_Extension, FreshRSS_Feed, …) and the global helpers (_t, _i, _url)
+      # live in FreshRSS. So check core out and put the extension in its normal home.
+      - name: Check out FreshRSS
+        uses: actions/checkout@v7
+        with:
+          repository: FreshRSS/FreshRSS
+          ref: edge
+          path: FreshRSS
+
+      - name: Check out this extension inside it
+        uses: actions/checkout@v7
+        with:
+          path: FreshRSS/extensions/xExtension-RssCloud
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: ctype, curl, dom, fileinfo, gmp, intl, mbstring, pdo_sqlite, simplexml, xml, xmlreader, zip
+          coverage: none
+
+      - name: Install FreshRSS dev dependencies
+        working-directory: FreshRSS
+        run: composer install --prefer-dist --no-progress --no-interaction
+
+      - name: Lint
+        working-directory: FreshRSS/extensions/xExtension-RssCloud
+        run: find . \( -name '*.php' -o -name '*.phtml' \) -print0 | xargs -0 -n1 php -l > /dev/null
+
+      - name: phpcs
+        working-directory: FreshRSS
+        run: |
+          # Core's ruleset excludes extensions/, because third-party extensions
+          # normally live in their own repos. Drop that one line, reuse everything else,
+          # so the style rules never drift from core's.
+          sed '/(?-i:extensions)/d' phpcs.xml > phpcs-extensions.xml
+          vendor/bin/phpcs --standard=phpcs-extensions.xml extensions/xExtension-RssCloud -s -p
+
+      - name: phpstan
+        working-directory: FreshRSS/extensions/xExtension-RssCloud
+        run: ../../vendor/bin/phpstan analyse -c phpstan.neon --memory-limit 512M --no-progress
+
+  markdown:
+    name: Markdown
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - run: npx --yes markdownlint-cli2@0.23.2

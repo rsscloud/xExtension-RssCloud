@@ -138,6 +138,40 @@ curl -i -d 'url=<feed>' 'https://rss.example.net/p/api/misc.php/rssCloud/<token>
 tail -f data/users/_/log_rsscloud.txt
 ```
 
+## Development
+
+This extension has no dependencies of its own. Its checks run against FreshRSS core, because every
+class it touches lives there — so clone it into a FreshRSS checkout at
+`FreshRSS/extensions/xExtension-RssCloud`, then, from the FreshRSS root:
+
+```sh
+composer install
+
+# phpstan, using core's ruleset scoped to this extension
+( cd extensions/xExtension-RssCloud && ../../vendor/bin/phpstan analyse -c phpstan.neon )
+
+# phpcs — core's ruleset excludes extensions/, so drop that one line
+sed '/(?-i:extensions)/d' phpcs.xml > phpcs-extensions.xml
+vendor/bin/phpcs --standard=phpcs-extensions.xml extensions/xExtension-RssCloud -s
+```
+
+CI runs exactly these against FreshRSS `edge` on every push and pull request.
+
+### Commits
+
+Releases are automated with [Release Please](https://github.com/googleapis/release-please), which
+derives the version and CHANGELOG from
+[Conventional Commit](https://www.conventionalcommits.org/) subjects on `main`. Merging its release
+PR bumps both `version.txt` and the `version` field in `metadata.json`, tags, and attaches an
+installable zip to the GitHub release.
+
+A subject that does not conform is not an error anywhere — it is just silently dropped from the next
+release. Enable the hook that catches it, once per clone:
+
+```sh
+git config core.hooksPath .githooks
+```
+
 ## License
 
 [AGPL-3.0](LICENSE), matching FreshRSS itself.

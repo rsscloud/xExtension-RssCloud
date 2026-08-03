@@ -1,0 +1,30 @@
+// Mirrors FreshRSS core's .markdownlint-cli2.jsonc, minus its `extensions/**` ignore
+// (core skips extensions because they normally live in their own repos, like this one).
+{
+	"config": {
+		"default": true,
+		"blanks-around-fences": false,
+		"blanks-around-lists": false,
+		"first-line-heading": false,
+		"line-length": false,
+		"no-hard-tabs": false,
+		"no-inline-html": {
+			"allowed_elements": ["br", "img", "kbd"]
+		},
+		"no-multiple-blanks": {
+			"maximum": 2
+		},
+		"no-trailing-spaces": true,
+		"table-column-style": false,
+		"ul-indent": false,
+		"ul-style": {
+			"style": "consistent"
+		}
+	},
+	"globs": [
+		"**/*.md"
+	],
+	"ignores": [
+		"**/node_modules/**"
+	]
+}

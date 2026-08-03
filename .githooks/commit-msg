@@ -1,0 +1,47 @@
+#!/bin/sh
+#
+# Reject commit subjects that Release Please cannot parse.
+#
+# Release Please derives the next version and the CHANGELOG entirely from
+# Conventional Commit subjects on main, so a non-conforming subject is not an
+# error anywhere -- it is silently dropped from the next release. This hook is
+# the only thing that catches it.
+#
+# Enable once per clone:
+#     git config core.hooksPath .githooks
+#
+set -eu
+
+message_file="$1"
+
+# The subject is the first line that is neither a comment nor blank.
+subject=$(grep -v '^#' "$message_file" | grep -v '^[[:space:]]*$' | head -n 1)
+
+# Messages Git generates itself are exempt.
+case "$subject" in
+	'Merge '*|'Revert '*|'fixup! '*|'squash! '*|'Reapply '*) exit 0 ;;
+esac
+
+types='build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test'
+
+if printf '%s' "$subject" | grep -Eq "^(${types})(\([a-z0-9._/-]+\))?!?: .+"; then
+	exit 0
+fi
+
+cat >&2 <<EOF
+
+  ✗ Not a Conventional Commit, so Release Please would ignore it.
+
+    got: ${subject}
+
+    Format: <type>[(scope)][!]: <description>
+    Types:  build chore ci docs feat fix perf refactor revert style test
+
+    feat: notify subscribers when a dynamic OPML list changes
+    fix(callback): reject notifications for unregistered resources
+    feat!: drop support for xml-rpc clouds
+
+    "!" or a "BREAKING CHANGE:" footer triggers a major bump.
+
+EOF
+exit 1

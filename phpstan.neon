@@ -1,0 +1,25 @@
+# Analyse this extension using FreshRSS's own PHPStan configuration.
+#
+# Requires FreshRSS checked out two levels up -- i.e. this extension sitting in
+# its normal home at FreshRSS/extensions/xExtension-RssCloud -- with its dev
+# dependencies installed. See .github/workflows/ci.yml.
+#
+# Run from this directory:
+#     ../../vendor/bin/phpstan analyse -c phpstan.neon
+includes:
+	- ../../phpstan.dist.neon
+
+parameters:
+	# Core's ruleset already covers extensions/, but analysing only this one means
+	# core's ignoreErrors patterns match nothing, which is itself reported as an error.
+	reportUnmatchedIgnoredErrors: false
+
+	# Override rather than extend core's `paths: [.]`, so core is not re-analysed.
+	paths!:
+		- .
+
+	# Still needed for symbol discovery: the global helpers (_t, _i, _url) and every
+	# FreshRSS_*/Minz_* class this extension touches live here.
+	scanDirectories:
+		- ../../app
+		- ../../lib
