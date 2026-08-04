@@ -11,6 +11,12 @@
 		"no-inline-html": {
 			"allowed_elements": ["br", "img", "kbd"]
 		},
+		// A changelog repeats "### Bug Fixes" under every release, which is only a duplicate if the
+		// whole document is compared at once. Release Please generates those, so the alternative to
+		// this is a lint failure on every release after the first.
+		"no-duplicate-heading": {
+			"siblings_only": true
+		},
 		"no-multiple-blanks": {
 			"maximum": 2
 		},
