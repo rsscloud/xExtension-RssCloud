@@ -27,7 +27,8 @@ final class RssCloud_Subscriber {
 	 * or when the lease is old enough that the cloud server has probably expired it.
 	 *
 	 * rssCloud has no lease negotiation — the server does not tell us how long the subscription
-	 * lasts — so this is purely a local timer. The conventional expiry is around 24 hours.
+	 * lasts — so this is purely a local timer. Subscriptions expire after 25 hours and are meant to
+	 * be renewed every 24 (http://walkthrough.rsscloud.co/).
 	 *
 	 * @param RssCloudState $state
 	 */
