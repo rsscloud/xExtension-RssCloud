@@ -50,6 +50,18 @@ final class RssCloudExtension extends Minz_Extension {
 	/** Upper bound on `pleaseNotify` calls issued in a single refresh cycle, so cron cannot stall. */
 	public const MAX_SUBSCRIPTIONS_PER_RUN = 10;
 
+	/** A cloud server is registered and believed to be notifying us. */
+	public const STATUS_ACTIVE = 'active';
+
+	/** The last `pleaseNotify` was rejected or could not be made; `error_message` says why. */
+	public const STATUS_ERROR = 'error';
+
+	/** Discovered, but no registration has been attempted yet. */
+	public const STATUS_PENDING = 'pending';
+
+	/** Registered successfully, but the lease is older than the renewal window and may have lapsed. */
+	public const STATUS_STALE = 'stale';
+
 	/** Feed attribute holding the resource URL this feed is (or should be) subscribed under. */
 	private const FEED_ATTRIBUTE = 'rssCloud';
 
@@ -147,6 +159,46 @@ final class RssCloudExtension extends Minz_Extension {
 	public function renewSeconds(): int {
 		$hours = $this->getSystemConfigurationInt('renew_hours') ?? self::DEFAULT_RENEW_HOURS;
 		return min(self::MAX_RENEW_HOURS, max(1, $hours)) * 3600;
+	}
+
+	/**
+	 * Every known subscription with the state the configuration screen displays, resource-sorted
+	 * because {@see RssCloud_Registry::all()} yields in hash order.
+	 *
+	 * Collected rather than streamed: the view needs to know whether there is anything at all
+	 * before it commits to drawing a table, which a generator cannot answer.
+	 *
+	 * @return list<array{state:RssCloudState,status:self::STATUS_*,subscribers:list<string>}>
+	 */
+	public function subscriptions(): array {
+		$registry = $this->registry();
+		$renewSeconds = $this->renewSeconds();
+
+		$rows = [];
+		foreach ($registry->all() as $state) {
+			$rows[] = [
+				'state' => $state,
+				'status' => self::statusOf($state, $renewSeconds),
+				'subscribers' => $registry->subscribers($state['url']),
+			];
+		}
+		usort($rows, static fn(array $a, array $b): int => strcmp($a['state']['url'], $b['state']['url']));
+
+		return $rows;
+	}
+
+	/**
+	 * @param RssCloudState $state
+	 * @return self::STATUS_*
+	 */
+	private static function statusOf(array $state, int $renewSeconds): string {
+		if ($state['error']) {
+			return self::STATUS_ERROR;
+		}
+		if ($state['lease_start'] <= 0) {
+			return self::STATUS_PENDING;
+		}
+		return RssCloud_Subscriber::isHealthy($state, $renewSeconds) ? self::STATUS_ACTIVE : self::STATUS_STALE;
 	}
 
 	public function maxStalenessSeconds(): int {

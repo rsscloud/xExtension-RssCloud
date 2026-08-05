@@ -2,6 +2,7 @@
 	declare(strict_types=1);
 	/** @var RssCloudExtension $this */
 	$callback = $this->callbackUrl();
+	$subscriptions = $this->subscriptions();
 ?>
 <form action="<?= _url('extension', 'configure', 'e', urlencode($this->getName())) ?>" method="post">
 	<input type="hidden" name="_csrf" value="<?= FreshRSS_Auth::csrfToken() ?>" />
@@ -87,3 +88,42 @@
 		</div>
 	</div>
 </form>
+
+<h2><?= _t('ext.rsscloud.status') ?></h2>
+<p class="help"><?= _i('help') ?> <?= _t('ext.rsscloud.status.help') ?></p>
+
+<?php if ($subscriptions === []): ?>
+	<p><?= _t('ext.rsscloud.status.none') ?></p>
+<?php else: ?>
+<table>
+	<thead>
+		<tr>
+			<th><?= _t('ext.rsscloud.status.resource') ?></th>
+			<th><?= _t('ext.rsscloud.status.kind') ?></th>
+			<th><?= _t('ext.rsscloud.status.state') ?></th>
+			<th><?= _t('ext.rsscloud.status.endpoint') ?></th>
+			<th><?= _t('ext.rsscloud.status.renewed') ?></th>
+			<th><?= _t('ext.rsscloud.status.notified') ?></th>
+			<th><?= _t('ext.rsscloud.status.subscribers') ?></th>
+		</tr>
+	</thead>
+	<tbody>
+		<?php foreach ($subscriptions as $subscription): $state = $subscription['state']; ?>
+		<tr>
+			<td><?= htmlspecialchars($state['url'], ENT_COMPAT, 'UTF-8') ?></td>
+			<td><?= _t('ext.rsscloud.status.kind.' . $state['kind']) ?></td>
+			<td>
+				<?= _t('ext.rsscloud.status.' . $subscription['status']) ?>
+				<?php if ($state['error_message'] !== ''): ?>
+					<br /><small><?= htmlspecialchars($state['error_message'], ENT_COMPAT, 'UTF-8') ?></small>
+				<?php endif; ?>
+			</td>
+			<td><?= htmlspecialchars($state['endpoint'], ENT_COMPAT, 'UTF-8') ?></td>
+			<td><?= $state['lease_start'] > 0 ? timestamptodate($state['lease_start']) : _t('ext.rsscloud.status.never') ?></td>
+			<td><?= $state['last_notify'] > 0 ? timestamptodate($state['last_notify']) : _t('ext.rsscloud.status.never') ?></td>
+			<td><?= htmlspecialchars(implode(', ', $subscription['subscribers']), ENT_COMPAT, 'UTF-8') ?></td>
+		</tr>
+		<?php endforeach; ?>
+	</tbody>
+</table>
+<?php endif; ?>
