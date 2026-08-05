@@ -10,8 +10,15 @@ permissions:
 
 jobs:
   php:
-    name: PHP
+    name: PHP (FreshRSS ${{ matrix.freshrss }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both ends of the supported range. Analysing only the development tip is how a call to
+        # a core method that exists solely on edge -- FreshRSS_http_Util::getCurlResolveInfo(),
+        # added after 1.29.1 -- reached users as a fatal error on every released version.
+        freshrss: [edge, '1.29.0']
     steps:
       # This extension cannot be analysed on its own: every class it touches
       # (Minz_Extension, FreshRSS_Feed, …) and the global helpers (_t, _i, _url)
@@ -20,7 +27,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: FreshRSS/FreshRSS
-          ref: edge
+          ref: ${{ matrix.freshrss }}
           path: FreshRSS
 
       - name: Check out this extension inside it
