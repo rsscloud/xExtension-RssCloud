@@ -23,3 +23,21 @@ parameters:
 	scanDirectories:
 		- ../../app
 		- ../../lib
+
+	# `getCurlResolveInfo()` arrived after 1.29.1, so whether it exists depends on which core is
+	# checked out alongside -- something PHPStan cannot model from one checkout. Whichever core it
+	# analyses, it calls the runtime guard redundant, just from opposite directions. Both entries
+	# are listed so a single config serves either; `reportUnmatchedIgnoredErrors: false` above lets
+	# the inapplicable one pass unmatched. Drop the guard and this whole block once 1.29.2 is the
+	# oldest supported release.
+	ignoreErrors:
+		-
+			# Against edge, which has the method.
+			identifier: function.alreadyNarrowedType
+			message: '#Call to function method_exists\(\) with .FreshRSS_http_Util. and .getCurlResolveInfo. will always evaluate to true\.#'
+			path: RssCloud/Redirects.php
+		-
+			# Against 1.29.1 and older, which do not.
+			identifier: function.impossibleType
+			message: '#Call to function method_exists\(\) with .FreshRSS_http_Util. and .getCurlResolveInfo. will always evaluate to false\.#'
+			path: RssCloud/Redirects.php

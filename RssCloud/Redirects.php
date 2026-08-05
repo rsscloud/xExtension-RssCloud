@@ -148,11 +148,16 @@ final class RssCloud_Redirects {
 			return false;
 		}
 
-		// Re-checked at every hop, so a redirect cannot walk into the private network.
-		$resolve = FreshRSS_http_Util::getCurlResolveInfo($url);
-		if (!is_array($resolve)) {
-			// null: the host's IP is not in the allowlist. false: the host did not resolve.
-			return false;
+		// Re-checked at every hop, so a redirect cannot walk into the private network. Cores older than
+		// FreshRSS 1.29.2 have no such check to offer — `httpGet()` did not pin DNS there either, so the
+		// probe goes ahead unpinned rather than disabling redirect resolution on every released version.
+		$resolve = [];
+		if (method_exists(FreshRSS_http_Util::class, 'getCurlResolveInfo')) {
+			$resolve = FreshRSS_http_Util::getCurlResolveInfo($url);
+			if (!is_array($resolve)) {
+				// null: the host's IP is not in the allowlist. false: the host did not resolve.
+				return false;
+			}
 		}
 
 		$ch = curl_init();
