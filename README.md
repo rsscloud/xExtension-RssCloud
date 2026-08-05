@@ -11,6 +11,17 @@ push as a feed.
 This runs alongside core's WebSub support and shares nothing with it. A feed advertising both a hub
 and a cloud will be subscribed through both.
 
+## Requirements
+
+**FreshRSS 1.29.0 or newer.** The binding constraint is `Minz_HookType::FeedsListBeforeActualize`,
+which core added in that release.
+
+One behaviour is version-dependent rather than required. When walking a feed's permanent redirects,
+each hop is re-checked against the internal-host allowlist through
+`FreshRSS_http_Util::getCurlResolveInfo()`, which core added after 1.29.1. Cores without it skip
+that check and probe without DNS pinning — the same exposure those versions already carry for every
+feed fetch, since their `httpGet()` did not pin DNS either.
+
 ## Discovery
 
 | Resource | Advertisement | Read from |
