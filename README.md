@@ -195,6 +195,10 @@ class it touches lives there — so clone it into a FreshRSS checkout at
 ```sh
 composer install
 
+# phpunit, using core's autoloader as the bootstrap
+( cd extensions/xExtension-RssCloud && \
+  ../../vendor/bin/phpunit --bootstrap tests/bootstrap.php tests )
+
 # phpstan, using core's ruleset scoped to this extension
 ( cd extensions/xExtension-RssCloud && ../../vendor/bin/phpstan analyse -c phpstan.neon )
 
@@ -203,7 +207,9 @@ sed '/(?-i:extensions)/d' phpcs.xml > phpcs-extensions.xml
 vendor/bin/phpcs --standard=phpcs-extensions.xml extensions/xExtension-RssCloud -s
 ```
 
-CI runs exactly these against FreshRSS `edge` on every push and pull request.
+CI runs exactly these on every push and pull request, against **both** ends of the supported range:
+FreshRSS `edge` and `1.29.0`. Analysing only the development tip once let a call to an edge-only
+core method ship as a fatal error on every released version, so the floor is checked too.
 
 ### Commits
 

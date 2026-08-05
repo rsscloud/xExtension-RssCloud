@@ -50,6 +50,15 @@ jobs:
         working-directory: FreshRSS/extensions/xExtension-RssCloud
         run: find . \( -name '*.php' -o -name '*.phtml' \) -print0 | xargs -0 -n1 php -l > /dev/null
 
+      - name: phpunit
+        working-directory: FreshRSS/extensions/xExtension-RssCloud
+        # Core's PHPUnit and core's autoloader, so there is no second set of dev dependencies to
+        # keep in step. Runs against both cores in the matrix, which is the point: the tests
+        # exercise the extension against whichever FreshRSS is checked out beside it.
+        run: >-
+          ../../vendor/bin/phpunit --bootstrap tests/bootstrap.php
+          --display-notices --display-deprecations tests
+
       - name: phpcs
         working-directory: FreshRSS
         run: |
