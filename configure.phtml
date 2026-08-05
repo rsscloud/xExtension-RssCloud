@@ -48,7 +48,7 @@
 	<div class="form-group">
 		<label class="group-name" for="renew_hours"><?= _t('ext.rsscloud.renew_hours') ?></label>
 		<div class="group-controls">
-			<input type="number" name="renew_hours" id="renew_hours" min="1" max="168"
+			<input type="number" name="renew_hours" id="renew_hours" min="1" max="<?= RssCloudExtension::MAX_RENEW_HOURS ?>"
 				value="<?= (int)($this->renewSeconds() / 3600) ?>" />
 			<p class="help"><?= _i('help') ?> <?= _t('ext.rsscloud.renew_hours.help') ?></p>
 		</div>

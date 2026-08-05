@@ -25,11 +25,21 @@ final class RssCloudExtension extends Minz_Extension {
 	public const NAME = 'rssCloud';
 
 	/**
-	 * rssCloud has no lease negotiation, and the protocol documentation does not state an expiry.
-	 * The convention among implementations is around 24 hours, so renew slightly early — the same
-	 * policy core applies to WebSub leases in `FreshRSS_Feed::pubSubHubbubPrepare()`.
+	 * rssCloud has no lease negotiation: the `pleaseNotify` response carries no duration. The rule
+	 * is documented instead — subscriptions expire after 25 hours and must be renewed every 24
+	 * (http://walkthrough.rsscloud.co/). Renewing at 23 stays an hour inside that requirement and
+	 * leaves two hours before expiry, which is the margin {@see self::MAX_SUBSCRIPTIONS_PER_RUN}
+	 * eats into when many subscriptions fall due at once. Core applies the same renew-early policy
+	 * to WebSub leases in `FreshRSS_Feed::pubSubHubbubPrepare()`.
 	 */
 	public const DEFAULT_RENEW_HOURS = 23;
+
+	/**
+	 * Renewing later than the documented 24-hour rule cannot work: the subscription is already gone
+	 * by 25 hours, so every larger value simply lets it lapse. Clamped on the read path rather than
+	 * only in the form, so a hand-edited configuration cannot get past it either.
+	 */
+	public const MAX_RENEW_HOURS = 24;
 
 	/** How stale a cloud-covered resource may get before we poll it anyway, as a safety net. */
 	public const DEFAULT_MAX_STALENESS_HOURS = 24;
@@ -135,7 +145,8 @@ final class RssCloudExtension extends Minz_Extension {
 	}
 
 	public function renewSeconds(): int {
-		return max(1, $this->getSystemConfigurationInt('renew_hours') ?? self::DEFAULT_RENEW_HOURS) * 3600;
+		$hours = $this->getSystemConfigurationInt('renew_hours') ?? self::DEFAULT_RENEW_HOURS;
+		return min(self::MAX_RENEW_HOURS, max(1, $hours)) * 3600;
 	}
 
 	public function maxStalenessSeconds(): int {
