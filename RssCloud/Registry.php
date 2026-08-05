@@ -40,13 +40,32 @@ final class RssCloud_Registry {
 	 * @return RssCloudState|null
 	 */
 	public function load(string $resourceUrl): ?array {
-		$json = @file_get_contents($this->directory($resourceUrl) . '/!cloud.json');
+		return self::readState($this->directory($resourceUrl), $resourceUrl);
+	}
+
+	/**
+	 * Read and normalise the state file held in one subscription directory.
+	 *
+	 * Shared by {@see self::load()} and {@see self::all()}, which differ only in how they arrive at
+	 * a directory: `load()` derives it from a resource URL, while `all()` walks them and recovers
+	 * the URL from the file, the directory name being a one-way hash. Parsing this in two places
+	 * left the copies free to diverge, and they had.
+	 *
+	 * An absent file is unremarkable — {@see self::save()} creates the directory before writing it,
+	 * and {@see self::addSubscriber()} can create one on its own — so only content that exists and
+	 * cannot be used is worth logging.
+	 *
+	 * @param string $context names the subscription in the log
+	 * @return RssCloudState|null
+	 */
+	private static function readState(string $directory, string $context): ?array {
+		$json = @file_get_contents($directory . '/!cloud.json');
 		if (!is_string($json) || $json === '') {
 			return null;
 		}
 		$state = json_decode($json, true);
-		if (!is_array($state) || !is_string($state['url'] ?? null)) {
-			Minz_Log::warning('rssCloud: invalid state JSON for ' . $resourceUrl, RSSCLOUD_LOG);
+		if (!is_array($state) || !is_string($state['url'] ?? null) || $state['url'] === '') {
+			Minz_Log::warning('rssCloud: invalid state JSON for ' . $context, RSSCLOUD_LOG);
 			return null;
 		}
 		return self::normalise($state);
@@ -59,7 +78,8 @@ final class RssCloud_Registry {
 	private static function normalise(array $state): array {
 		return [
 			'url' => is_string($state['url'] ?? null) ? $state['url'] : '',
-			'kind' => is_string($state['kind'] ?? null) ? $state['kind'] : self::KIND_FEED,
+			// Constrained to the two known kinds, so that a caller may key off it without checking.
+			'kind' => ($state['kind'] ?? null) === self::KIND_OPML ? self::KIND_OPML : self::KIND_FEED,
 			'endpoint' => is_string($state['endpoint'] ?? null) ? $state['endpoint'] : '',
 			'registerProcedure' => is_string($state['registerProcedure'] ?? null) ? $state['registerProcedure'] : '',
 			'lease_start' => is_numeric($state['lease_start'] ?? null) ? (int)$state['lease_start'] : 0,
@@ -145,18 +165,18 @@ final class RssCloud_Registry {
 	/**
 	 * Iterate over every known subscription.
 	 *
+	 * Yields in directory order, which is `sha1()` order and so arbitrary: anything displaying
+	 * these has to sort them itself. Being a generator, the result is single-pass and cannot be
+	 * counted without first collecting it.
+	 *
 	 * @return iterable<RssCloudState>
 	 */
 	public function all(): iterable {
 		$directories = @glob($this->basePath . '/resources/*', GLOB_ONLYDIR | GLOB_NOSORT);
 		foreach ($directories ?: [] as $directory) {
-			$json = @file_get_contents($directory . '/!cloud.json');
-			if (!is_string($json) || $json === '') {
-				continue;
-			}
-			$state = json_decode($json, true);
-			if (is_array($state) && is_string($state['url'] ?? null) && $state['url'] !== '') {
-				yield self::normalise($state);
+			$state = self::readState($directory, $directory);
+			if ($state !== null) {
+				yield $state;
 			}
 		}
 	}
