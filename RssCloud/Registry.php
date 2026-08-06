@@ -83,7 +83,12 @@ final class RssCloud_Registry {
 			'endpoint' => is_string($state['endpoint'] ?? null) ? $state['endpoint'] : '',
 			'registerProcedure' => is_string($state['registerProcedure'] ?? null) ? $state['registerProcedure'] : '',
 			// The `protocol` value this server was last known to accept; empty until one has worked.
-			'protocol' => is_string($state['protocol'] ?? null) ? $state['protocol'] : '',
+			// Constrained to the two this extension can speak, because whatever is stored here is
+			// tried first: an unrecognised one would be advertised to the cloud server ahead of a
+			// value known to work.
+			'protocol' => in_array($state['protocol'] ?? null,
+				[RssCloud_Endpoint::PROTOCOL_HTTP, RssCloud_Endpoint::PROTOCOL_HTTPS], true)
+				? $state['protocol'] : '',
 			'lease_start' => is_numeric($state['lease_start'] ?? null) ? (int)$state['lease_start'] : 0,
 			'last_notify' => is_numeric($state['last_notify'] ?? null) ? (int)$state['last_notify'] : 0,
 			// Assume broken until a notification actually arrives, like the core WebSub code does.

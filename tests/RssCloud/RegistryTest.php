@@ -32,7 +32,9 @@ class RegistryTest extends \PHPUnit\Framework\TestCase {
 	/** Write a state file straight to disk, bypassing save(), so malformed content can be staged. */
 	private function writeRaw(string $resourceUrl, string $json): void {
 		$directory = $this->registry->directory($resourceUrl);
-		mkdir($directory, 0770, true);
+		if (!is_dir($directory)) {
+			mkdir($directory, 0770, true);
+		}
 		if ($json !== '') {
 			file_put_contents($directory . '/!cloud.json', $json);
 		}
@@ -122,6 +124,21 @@ class RegistryTest extends \PHPUnit\Framework\TestCase {
 
 		self::assertIsArray($state);
 		self::assertSame('', $state['protocol']);
+	}
+
+	/**
+	 * Whatever is stored here is tried first, so a value this extension cannot speak must not
+	 * survive being read back and be advertised to a cloud server.
+	 */
+	public function test_load_discardsUnrecognisedProtocol(): void {
+		foreach (['xml-rpc', 'soap', 'HTTP-POST', 'nonsense', ''] as $stored) {
+			$this->writeState('https://n.example/feed', ['protocol' => $stored]);
+
+			$state = $this->registry->load('https://n.example/feed');
+
+			self::assertIsArray($state);
+			self::assertSame('', $state['protocol'], "stored protocol: {$stored}");
+		}
 	}
 
 	public function test_load_preservesRememberedProtocol(): void {
