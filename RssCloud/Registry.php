@@ -16,7 +16,7 @@ declare(strict_types=1);
  * identifies the resource by the `url` parameter of each notification.
  *
  * @phpstan-type RssCloudState array{url:string,kind:string,endpoint:string,registerProcedure:string,
- *   lease_start:int,last_notify:int,error:bool,error_message:string}
+ *   protocol:string,lease_start:int,last_notify:int,error:bool,error_message:string}
  */
 final class RssCloud_Registry {
 
@@ -82,6 +82,8 @@ final class RssCloud_Registry {
 			'kind' => ($state['kind'] ?? null) === self::KIND_OPML ? self::KIND_OPML : self::KIND_FEED,
 			'endpoint' => is_string($state['endpoint'] ?? null) ? $state['endpoint'] : '',
 			'registerProcedure' => is_string($state['registerProcedure'] ?? null) ? $state['registerProcedure'] : '',
+			// The `protocol` value this server was last known to accept; empty until one has worked.
+			'protocol' => is_string($state['protocol'] ?? null) ? $state['protocol'] : '',
 			'lease_start' => is_numeric($state['lease_start'] ?? null) ? (int)$state['lease_start'] : 0,
 			'last_notify' => is_numeric($state['last_notify'] ?? null) ? (int)$state['last_notify'] : 0,
 			// Assume broken until a notification actually arrives, like the core WebSub code does.
@@ -112,10 +114,12 @@ final class RssCloud_Registry {
 	public function remember(string $resourceUrl, RssCloud_Endpoint $endpoint, string $kind): array {
 		$state = $this->load($resourceUrl) ?? self::normalise(['url' => $resourceUrl]);
 		if ($state['endpoint'] !== $endpoint->url) {
-			// The publisher moved to a different cloud server: start over.
+			// The publisher moved to a different cloud server: start over. The new server need not
+			// accept the same `protocol` value as the old one, so that is forgotten too.
 			$state['lease_start'] = 0;
 			$state['error'] = true;
 			$state['error_message'] = '';
+			$state['protocol'] = '';
 		}
 		$state['kind'] = $kind;
 		$state['endpoint'] = $endpoint->url;

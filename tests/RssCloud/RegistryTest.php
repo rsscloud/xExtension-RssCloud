@@ -114,6 +114,25 @@ class RegistryTest extends \PHPUnit\Framework\TestCase {
 		self::assertTrue($state['error']);
 	}
 
+	/** Nothing is known about which protocol a server accepts until one has actually worked. */
+	public function test_load_defaultsProtocolToUnknown(): void {
+		$this->writeState('https://j.example/feed', []);
+
+		$state = $this->registry->load('https://j.example/feed');
+
+		self::assertIsArray($state);
+		self::assertSame('', $state['protocol']);
+	}
+
+	public function test_load_preservesRememberedProtocol(): void {
+		$this->writeState('https://k.example/feed', ['protocol' => RssCloud_Endpoint::PROTOCOL_HTTP]);
+
+		$state = $this->registry->load('https://k.example/feed');
+
+		self::assertIsArray($state);
+		self::assertSame(RssCloud_Endpoint::PROTOCOL_HTTP, $state['protocol']);
+	}
+
 	public function test_all_yieldsOnlyUsableStateAndReportsTheRest(): void {
 		$this->writeState('https://a.example/feed', ['endpoint' => 'https://rpc.example/x']);
 		$this->writeRaw('https://b.example/feed', '{not json');
@@ -187,6 +206,7 @@ class RegistryTest extends \PHPUnit\Framework\TestCase {
 			'endpoint' => 'https://old.example/pleaseNotify',
 			'lease_start' => 999,
 			'error' => false,
+			'protocol' => RssCloud_Endpoint::PROTOCOL_HTTP,
 		]);
 
 		$endpoint = RssCloud_Endpoint::fromUrl('https://new.example/pleaseNotify');
@@ -195,6 +215,8 @@ class RegistryTest extends \PHPUnit\Framework\TestCase {
 
 		self::assertSame(0, $moved['lease_start']);
 		self::assertTrue($moved['error']);
+		// A different server need not accept what the old one did.
+		self::assertSame('', $moved['protocol']);
 	}
 
 	public function test_remember_keepsLeaseWhenEndpointIsUnchanged(): void {

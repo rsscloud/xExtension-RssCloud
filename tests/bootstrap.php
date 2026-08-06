@@ -27,3 +27,4 @@ define('RSSCLOUD_LOG', sys_get_temp_dir() . '/rsscloud-test-' . getmypid() . '.l
 // involved here, so the classes under test are required explicitly.
 require dirname(__DIR__) . '/RssCloud/Endpoint.php';
 require dirname(__DIR__) . '/RssCloud/Registry.php';
+require dirname(__DIR__) . '/RssCloud/Subscriber.php';

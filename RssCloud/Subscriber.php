@@ -72,7 +72,6 @@ final class RssCloud_Subscriber {
 			'domain' => $this->callback->domain,
 			'port' => (string)$this->callback->port,
 			'path' => $this->callback->path,
-			'protocol' => $this->callback->protocol,
 			'registerProcedure' => $state['registerProcedure'],
 			'url1' => $state['url'],
 		];
@@ -81,27 +80,72 @@ final class RssCloud_Subscriber {
 		$state['lease_start'] = time();
 		$this->registry->save($state['url'], $state);
 
-		$response = FreshRSS_http_Util::httpGet($endpoint->url, null, 'xml', [], [
-			CURLOPT_POSTFIELDS => http_build_query($parameters),
-			CURLOPT_MAXREDIRS => 10,
-		]);
+		$candidates = self::protocolCandidates($state['protocol'], $this->callback->protocol);
+		$message = '';
+		$status = 0;
 
-		[$success, $message] = self::parseNotifyResult((string)$response['body'], (int)$response['status']);
+		foreach ($candidates as $i => $protocol) {
+			$response = FreshRSS_http_Util::httpGet($endpoint->url, null, 'xml', [], [
+				CURLOPT_POSTFIELDS => http_build_query($parameters + ['protocol' => $protocol]),
+				CURLOPT_MAXREDIRS => 10,
+			]);
+			$status = (int)$response['status'];
+			[$success, $message] = self::parseNotifyResult((string)$response['body'], $status);
 
-		$state['error'] = !$success;
-		$state['error_message'] = $success ? '' : $message;
-		$this->registry->save($state['url'], $state);
+			$log = 'rssCloud pleaseNotify ' . $state['url'] . ' via ' . $endpoint->url
+				. ' with callback ' . $this->callback->url() . ' as ' . $protocol
+				. ': ' . $status . ' ' . $message;
 
-		$log = 'rssCloud pleaseNotify ' . $state['url'] . ' via ' . $endpoint->url
-			. ' with callback ' . $this->callback->url()
-			. ': ' . $response['status'] . ' ' . $message;
-		if ($success) {
-			Minz_Log::notice($log, RSSCLOUD_LOG);
-		} else {
-			Minz_Log::warning($log, RSSCLOUD_LOG);
+			if ($success) {
+				// Remembered so that later renewals go straight to the value this server accepts,
+				// instead of failing the preferred one every time.
+				$state['protocol'] = $protocol;
+				$state['error'] = false;
+				$state['error_message'] = '';
+				$this->registry->save($state['url'], $state);
+				Minz_Log::notice($log, RSSCLOUD_LOG);
+				return true;
+			}
+
+			// A negative status is FreshRSS-internal: the request never reached the server, so it
+			// cannot be objecting to the protocol and another value would fail identically.
+			$retrying = $status > 0 && isset($candidates[$i + 1]);
+			if ($retrying) {
+				// Not yet a fault: the fallback may still succeed, and warning here every time
+				// would make a working subscription look broken in the log.
+				Minz_Log::debug($log, RSSCLOUD_LOG);
+			} else {
+				Minz_Log::warning($log, RSSCLOUD_LOG);
+				break;
+			}
 		}
 
-		return $success;
+		$state['error'] = true;
+		$state['error_message'] = $message === '' ? "HTTP {$status}" : $message;
+		$this->registry->save($state['url'], $state);
+
+		return false;
+	}
+
+	/**
+	 * The `protocol` parameter of `pleaseNotify` names the notification method — `http-post` for
+	 * REST, as against `xml-rpc` or `soap` — and not the scheme of the callback, which is carried by
+	 * `port`. Servers disagree about this: some accept `https-post` as a TLS-flavoured spelling,
+	 * while others take only the value the specification lists, so an HTTPS callback cannot simply
+	 * assume either one.
+	 *
+	 * The value this server last accepted is therefore tried first, falling back to plain
+	 * `http-post`, which every server understands. Registering over a plain HTTP callback has
+	 * nothing to fall back to, and yields a single candidate.
+	 *
+	 * @return non-empty-list<string>
+	 */
+	public static function protocolCandidates(string $remembered, string $callbackProtocol): array {
+		$preferred = $remembered !== '' ? $remembered : $callbackProtocol;
+		if ($preferred === RssCloud_Endpoint::PROTOCOL_HTTP) {
+			return [$preferred];
+		}
+		return [$preferred, RssCloud_Endpoint::PROTOCOL_HTTP];
 	}
 
 	/**
