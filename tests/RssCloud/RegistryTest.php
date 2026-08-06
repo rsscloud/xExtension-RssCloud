@@ -32,7 +32,9 @@ class RegistryTest extends \PHPUnit\Framework\TestCase {
 	/** Write a state file straight to disk, bypassing save(), so malformed content can be staged. */
 	private function writeRaw(string $resourceUrl, string $json): void {
 		$directory = $this->registry->directory($resourceUrl);
-		mkdir($directory, 0770, true);
+		if (!is_dir($directory)) {
+			mkdir($directory, 0770, true);
+		}
 		if ($json !== '') {
 			file_put_contents($directory . '/!cloud.json', $json);
 		}
@@ -114,6 +116,40 @@ class RegistryTest extends \PHPUnit\Framework\TestCase {
 		self::assertTrue($state['error']);
 	}
 
+	/** Nothing is known about which protocol a server accepts until one has actually worked. */
+	public function test_load_defaultsProtocolToUnknown(): void {
+		$this->writeState('https://j.example/feed', []);
+
+		$state = $this->registry->load('https://j.example/feed');
+
+		self::assertIsArray($state);
+		self::assertSame('', $state['protocol']);
+	}
+
+	/**
+	 * Whatever is stored here is tried first, so a value this extension cannot speak must not
+	 * survive being read back and be advertised to a cloud server.
+	 */
+	public function test_load_discardsUnrecognisedProtocol(): void {
+		foreach (['xml-rpc', 'soap', 'HTTP-POST', 'nonsense', ''] as $stored) {
+			$this->writeState('https://n.example/feed', ['protocol' => $stored]);
+
+			$state = $this->registry->load('https://n.example/feed');
+
+			self::assertIsArray($state);
+			self::assertSame('', $state['protocol'], "stored protocol: {$stored}");
+		}
+	}
+
+	public function test_load_preservesRememberedProtocol(): void {
+		$this->writeState('https://k.example/feed', ['protocol' => RssCloud_Endpoint::PROTOCOL_HTTP]);
+
+		$state = $this->registry->load('https://k.example/feed');
+
+		self::assertIsArray($state);
+		self::assertSame(RssCloud_Endpoint::PROTOCOL_HTTP, $state['protocol']);
+	}
+
 	public function test_all_yieldsOnlyUsableStateAndReportsTheRest(): void {
 		$this->writeState('https://a.example/feed', ['endpoint' => 'https://rpc.example/x']);
 		$this->writeRaw('https://b.example/feed', '{not json');
@@ -187,6 +223,7 @@ class RegistryTest extends \PHPUnit\Framework\TestCase {
 			'endpoint' => 'https://old.example/pleaseNotify',
 			'lease_start' => 999,
 			'error' => false,
+			'protocol' => RssCloud_Endpoint::PROTOCOL_HTTP,
 		]);
 
 		$endpoint = RssCloud_Endpoint::fromUrl('https://new.example/pleaseNotify');
@@ -195,6 +232,8 @@ class RegistryTest extends \PHPUnit\Framework\TestCase {
 
 		self::assertSame(0, $moved['lease_start']);
 		self::assertTrue($moved['error']);
+		// A different server need not accept what the old one did.
+		self::assertSame('', $moved['protocol']);
 	}
 
 	public function test_remember_keepsLeaseWhenEndpointIsUnchanged(): void {
