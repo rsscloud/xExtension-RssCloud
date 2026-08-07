@@ -51,6 +51,25 @@ class SubscriberTest extends \PHPUnit\Framework\TestCase {
 		self::assertSame(RssCloud_Endpoint::PROTOCOL_HTTP, $candidates[0]);
 	}
 
+	/**
+	 * Most `<cloud>` elements advertise an http endpoint that permanently redirects to https. Without
+	 * this option libcurl follows that redirect as a bodyless GET, the server sees no `url1`, and
+	 * answers `No feed for url1.` — the failure that made several servers look permanently broken.
+	 */
+	public function test_notifyKeepsThePostBodyAcrossARedirect(): void {
+		$options = RssCloud_Subscriber::notifyCurlOptions('url1=https%3A%2F%2Fexample.com%2Ffeed.xml');
+
+		self::assertSame(CURL_REDIR_POST_ALL, $options[CURLOPT_POSTREDIR] ?? null,
+			'a 301 from http to https must not degrade the pleaseNotify POST into a GET');
+	}
+
+	/** The body is what carries url1, so it has to survive the option assembly intact. */
+	public function test_notifySendsTheBodyItWasGiven(): void {
+		$body = 'domain=example.org&port=443&url1=https%3A%2F%2Fexample.com%2Ffeed.xml';
+
+		self::assertSame($body, RssCloud_Subscriber::notifyCurlOptions($body)[CURLOPT_POSTFIELDS] ?? null);
+	}
+
 	/** Whatever the inputs, the caller always has at least one value to send. */
 	public function test_alwaysYieldsAtLeastOneCandidate(): void {
 		foreach (['', RssCloud_Endpoint::PROTOCOL_HTTP, RssCloud_Endpoint::PROTOCOL_HTTPS] as $remembered) {
