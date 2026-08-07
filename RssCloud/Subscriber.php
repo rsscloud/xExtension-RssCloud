@@ -58,6 +58,31 @@ final class RssCloud_Subscriber {
 	}
 
 	/**
+	 * The cURL options a `pleaseNotify` POST is sent with.
+	 *
+	 * `CURLOPT_POSTREDIR` is the load-bearing one, and it is not redundant even though it can look
+	 * that way. Most rssCloud endpoints are advertised as `http` in the `<cloud>` element and answer
+	 * with a permanent redirect to `https`; libcurl's default on 301/302/303 is to follow it as a
+	 * bodyless GET, exactly as `curl -L` does. The server then sees no `url1` and answers
+	 * `No feed for url1.`, which is what made several servers look permanently broken.
+	 *
+	 * On FreshRSS 1.29.x this is the whole ballgame: `httpGet()` sets `CURLOPT_FOLLOWLOCATION` and
+	 * lets libcurl do the following, so without this option the body is lost. Later versions follow
+	 * redirects by hand and happen to keep the body — which is why removing this line would look
+	 * harmless when tested against a development build and still break every released one.
+	 *
+	 * @return array<int,mixed>
+	 */
+	public static function notifyCurlOptions(string $body): array {
+		return [
+			CURLOPT_POSTFIELDS => $body,
+			// Keep the POST (and its body) across a 301/302/303 instead of degrading to GET.
+			CURLOPT_POSTREDIR => CURL_REDIR_POST_ALL,
+			CURLOPT_MAXREDIRS => 10,
+		];
+	}
+
+	/**
 	 * Issue a `pleaseNotify` for one resource.
 	 *
 	 * @param RssCloudState $state
@@ -85,10 +110,9 @@ final class RssCloud_Subscriber {
 		$status = 0;
 
 		foreach ($candidates as $i => $protocol) {
-			$response = FreshRSS_http_Util::httpGet($endpoint->url, null, 'xml', [], [
-				CURLOPT_POSTFIELDS => http_build_query($parameters + ['protocol' => $protocol]),
-				CURLOPT_MAXREDIRS => 10,
-			]);
+			$response = FreshRSS_http_Util::httpGet($endpoint->url, null, 'xml', [], self::notifyCurlOptions(
+				http_build_query($parameters + ['protocol' => $protocol]),
+			));
 			$status = (int)$response['status'];
 			[$success, $message] = self::parseNotifyResult((string)$response['body'], $status);
 
