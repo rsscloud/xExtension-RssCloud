@@ -125,7 +125,12 @@ final class RssCloud_Callback {
 		exit("Done: {$refreshed}\n");
 	}
 
+	/**
+	 * The notification says the feed changed, but within `cache_duration` of the last fetch SimplePie
+	 * would serve its cached copy instead. Drop the cache first, as core's "clear cache" action does.
+	 */
 	private function refreshFeed(string $url): bool {
+		FreshRSS_Factory::createFeedDao()->searchByUrl($url)?->clearCache();
 		[$nbUpdatedFeeds, ] = FreshRSS_feed_Controller::actualizeFeedsAndCommit(feed_url: $url);
 		return $nbUpdatedFeeds > 0;
 	}
