@@ -91,6 +91,7 @@ final class RssCloud_Callback {
 		$this->registry->save($state['url'], $state);
 
 		$refreshed = 0;
+		$clearedCaches = [];
 		foreach ($subscribers as $username) {
 			try {
 				FreshRSS_Context::initUser($username);
@@ -103,7 +104,7 @@ final class RssCloud_Callback {
 
 				$done = $state['kind'] === RssCloud_Registry::KIND_OPML
 					? $this->refreshOpml($state['url'])
-					: $this->refreshFeed($state['url']);
+					: $this->refreshFeed($state['url'], $clearedCaches);
 
 				if ($done) {
 					$refreshed++;
@@ -128,9 +129,18 @@ final class RssCloud_Callback {
 	/**
 	 * The notification says the feed changed, but within `cache_duration` of the last fetch SimplePie
 	 * would serve its cached copy instead. Drop the cache first, as core's "clear cache" action does.
+	 * Users with the same feed settings share one cache file, so it is dropped once per notification:
+	 * the first refresh writes the fresh copy, and the others read it instead of fetching again.
+	 *
+	 * @param array<string,true> $clearedCaches cache files already dropped for this notification
 	 */
-	private function refreshFeed(string $url): bool {
-		FreshRSS_Factory::createFeedDao()->searchByUrl($url)?->clearCache();
+	private function refreshFeed(string $url, array &$clearedCaches): bool {
+		$feed = FreshRSS_Factory::createFeedDao()->searchByUrl($url);
+		$cacheFile = $feed?->cacheFilename() ?? '';
+		if ($feed !== null && !isset($clearedCaches[$cacheFile])) {
+			$feed->clearCache();
+			$clearedCaches[$cacheFile] = true;
+		}
 		[$nbUpdatedFeeds, ] = FreshRSS_feed_Controller::actualizeFeedsAndCommit(feed_url: $url);
 		return $nbUpdatedFeeds > 0;
 	}
